@@ -1,0 +1,6 @@
+{
+  "name": "Lecture de Notes",
+  "description": "Application d'apprentissage et d'entraînement à la lecture de notes sur partition musicale avec partition défilante adaptative, choix des clefs, gammes et modes chronométrés.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

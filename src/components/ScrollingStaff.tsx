@@ -612,7 +612,7 @@ export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
         {/* Floating guidance banner when note paused at target */}
         {adaptiveScrolling && currentSpeedNormalized < 15 && !isPaused && (
           <div className="absolute top-2 right-4 px-3 py-1 bg-indigo-600/90 text-white rounded-full text-xs font-semibold shadow-md flex items-center gap-1.5 animate-bounce">
-            <span>Prenez votre temps pour déchiffrer la note !</span>
+            <span></span>
           </div>
         )}
       </div>

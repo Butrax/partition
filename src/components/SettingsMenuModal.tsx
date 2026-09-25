@@ -1,8 +1,9 @@
 import React from 'react';
-import { ClefType, PlayMode, NoteNaming, ScalePreset, Accidental } from '../types';
+import { ClefType, PlayMode, NoteNaming, ScalePreset, Accidental, NoteStatsMap } from '../types';
 import { CLEF_CONFIGS, SCALE_PRESETS } from '../utils/musicTheory';
 import { RangeSlider } from './RangeSlider';
 import { ScaleSelector } from './ScaleSelector';
+import { StatsView } from './StatsView';
 import {
   X,
   Sliders,
@@ -21,9 +22,10 @@ import {
   Eye,
   EyeOff,
   Layers,
+  BarChart3,
 } from 'lucide-react';
 
-export type SettingsTab = 'clef_scale' | 'range' | 'mode' | 'preferences';
+export type SettingsTab = 'clef_scale' | 'range' | 'mode' | 'stats' | 'preferences';
 
 interface SettingsMenuModalProps {
   isOpen: boolean;
@@ -63,6 +65,14 @@ interface SettingsMenuModalProps {
   onToggleAdaptive: () => void;
   notesCount: number;
   onChangeNotesCount: (count: number) => void;
+
+  // Statistics
+  stats: NoteStatsMap;
+  onClearStats: () => void;
+  focusWeakNotes?: boolean;
+  onToggleFocusWeakNotes?: () => void;
+  weakNotesThreshold?: number;
+  onChangeWeakNotesThreshold?: (threshold: number) => void;
 
   // Preferences
   naming: NoteNaming;
@@ -107,6 +117,12 @@ export const SettingsMenuModal: React.FC<SettingsMenuModalProps> = ({
   onToggleAdaptive,
   notesCount,
   onChangeNotesCount,
+  stats,
+  onClearStats,
+  focusWeakNotes,
+  onToggleFocusWeakNotes,
+  weakNotesThreshold,
+  onChangeWeakNotesThreshold,
   naming,
   onChangeNaming,
   inputView,
@@ -197,6 +213,7 @@ export const SettingsMenuModal: React.FC<SettingsMenuModalProps> = ({
               {activeTab === 'clef_scale' && '🎼 Clef & Gammes'}
               {activeTab === 'range' && '📏 Étendue des Notes'}
               {activeTab === 'mode' && '⏱️ Mode de Jeu & Vitesse'}
+              {activeTab === 'stats' && '📊 Statistiques & Maîtrise des Notes'}
               {activeTab === 'preferences' && '⚙️ Options & Affichage'}
             </span>
           </div>
@@ -250,6 +267,19 @@ export const SettingsMenuModal: React.FC<SettingsMenuModalProps> = ({
           >
             <Clock className="w-4 h-4" />
             <span>Mode & Vitesse</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => onChangeTab('stats')}
+            className={`flex items-center gap-1.5 px-3 py-2.5 text-xs sm:text-sm font-semibold border-b-2 whitespace-nowrap transition-colors ${
+              activeTab === 'stats'
+                ? 'border-indigo-500 text-indigo-400 bg-indigo-500/10'
+                : 'border-transparent text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            <BarChart3 className="w-4 h-4" />
+            <span>Statistiques</span>
           </button>
 
           <button
@@ -458,6 +488,14 @@ export const SettingsMenuModal: React.FC<SettingsMenuModalProps> = ({
                   keySignature={keySignature}
                   onChangeKeySignature={onChangeKeySignature}
                   naming={naming}
+                  focusWeakNotes={focusWeakNotes}
+                  onToggleFocusWeakNotes={onToggleFocusWeakNotes}
+                  weakNotesThreshold={weakNotesThreshold}
+                  onChangeWeakNotesThreshold={onChangeWeakNotesThreshold}
+                  stats={stats}
+                  currentClef={clef}
+                  minDiatonic={minDiatonic}
+                  maxDiatonic={maxDiatonic}
                 />
               </div>
             </div>
@@ -636,7 +674,17 @@ export const SettingsMenuModal: React.FC<SettingsMenuModalProps> = ({
             </div>
           )}
 
-          {/* TAB 4: PREFERENCES */}
+          {/* TAB 4: STATISTIQUES */}
+          {activeTab === 'stats' && (
+            <StatsView
+              stats={stats}
+              currentClef={clef}
+              naming={naming}
+              onClearStats={onClearStats}
+            />
+          )}
+
+          {/* TAB 5: PREFERENCES */}
           {activeTab === 'preferences' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               {/* Naming (Do Ré Mi vs C D E) */}

@@ -11,6 +11,7 @@ import {
   Settings,
   Flame,
   RotateCcw,
+  BarChart2,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -25,6 +26,8 @@ interface HeaderProps {
   onResetScore: () => void;
   streak: number;
   points: number;
+  focusWeakNotes?: boolean;
+  weakNotesThreshold?: number;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +42,8 @@ export const Header: React.FC<HeaderProps> = ({
   onResetScore,
   streak,
   points,
+  focusWeakNotes = false,
+  weakNotesThreshold = 70,
 }) => {
   const clefInfo = CLEF_CONFIGS[clef];
   const secClefInfo = CLEF_CONFIGS[secondaryClef];
@@ -102,6 +107,15 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </>
             )}
+            {focusWeakNotes && (
+              <span
+                className="inline-flex items-center gap-0.5 text-[10px] bg-amber-500/25 text-amber-300 px-1.5 py-0.5 rounded font-bold border border-amber-500/40 shrink-0"
+                title={`Ciblage des notes fragiles (< ${weakNotesThreshold}% de réussite)`}
+              >
+                <span>🎯</span>
+                <span className="hidden lg:inline">&lt;{weakNotesThreshold}%</span>
+              </span>
+            )}
           </button>
 
           {/* Menu 2: Étendue */}
@@ -126,7 +140,18 @@ export const Header: React.FC<HeaderProps> = ({
             <span className="font-bold text-indigo-300">{getPlayModeLabel(playMode)}</span>
           </button>
 
-          {/* Menu 4: Options & Affichage */}
+          {/* Menu 4: Statistiques */}
+          <button
+            type="button"
+            onClick={() => onOpenMenu('stats')}
+            className="flex items-center gap-1 px-2 sm:px-2.5 py-1 rounded-lg bg-slate-800/90 hover:bg-slate-750 text-slate-200 border border-slate-700/80 hover:border-indigo-500/80 transition-all text-xs font-semibold shadow-xs active:scale-95 touch-manipulation"
+            title="Menu Statistiques et Maîtrise des Notes"
+          >
+            <BarChart2 className="w-3.5 h-3.5 text-indigo-400 shrink-0" />
+            <span className="hidden sm:inline">Stats</span>
+          </button>
+
+          {/* Menu 5: Options & Affichage */}
           <button
             type="button"
             onClick={() => onOpenMenu('preferences')}

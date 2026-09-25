@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import {
   ClefType,
   PlayMode,
@@ -7,6 +7,7 @@ import {
   MusicalNote,
   ScalePreset,
   GameScore,
+  NoteStatsMap,
 } from './types';
 import {
   CLEF_CONFIGS,
@@ -16,6 +17,13 @@ import {
   formatNoteName,
 } from './utils/musicTheory';
 import { soundEngine } from './utils/audio';
+import {
+  loadSettingsFromStorage,
+  saveSettingsToStorage,
+  loadNoteStatsFromStorage,
+  updateNoteStat,
+  clearNoteStatsFromStorage,
+} from './utils/storage';
 
 import { Header } from './components/Header';
 import { ScoreBar } from './components/ScoreBar';
@@ -34,40 +42,70 @@ import {
 } from 'lucide-react';
 
 export default function App() {
-  // App Core State
-  const [clef, setClef] = useState<ClefType>('treble');
-  const [playMode, setPlayMode] = useState<PlayMode>('scrolling');
-  const [naming, setNaming] = useState<NoteNaming>('latin');
-  const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
-  const [notesCount, setNotesCount] = useState<number>(1);
-  const [showNoteHint, setShowNoteHint] = useState<boolean>(false);
-  const [inputView, setInputView] = useState<'both' | 'pads' | 'piano'>('pads');
+  const initialSettings = useMemo(() => loadSettingsFromStorage(), []);
 
-  // Dedicated Menu Modal State ('clef_scale' | 'range' | 'mode' | 'preferences' | null)
+  // App Core State
+  const [clef, setClef] = useState<ClefType>(initialSettings?.clef || 'treble');
+  const [playMode, setPlayMode] = useState<PlayMode>(initialSettings?.playMode || 'scrolling');
+  const [naming, setNaming] = useState<NoteNaming>(initialSettings?.naming || 'latin');
+  const [soundEnabled, setSoundEnabled] = useState<boolean>(initialSettings?.soundEnabled ?? true);
+  const [notesCount, setNotesCount] = useState<number>(initialSettings?.notesCount ?? 1);
+  const [showNoteHint, setShowNoteHint] = useState<boolean>(initialSettings?.showNoteHint ?? false);
+  const [inputView, setInputView] = useState<'both' | 'pads' | 'piano'>(initialSettings?.inputView || 'pads');
+
+  // Dedicated Menu Modal State ('clef_scale' | 'range' | 'mode' | 'stats' | 'preferences' | null)
   const [activeModalTab, setActiveModalTab] = useState<SettingsTab | null>(null);
 
   // Dual-Clef Training State (Grand Staff in continuous scrolling)
-  const [dualClefEnabled, setDualClefEnabled] = useState<boolean>(false);
-  const [secondaryClef, setSecondaryClef] = useState<ClefType>('bass');
-  const [minDiatonic2, setMinDiatonic2] = useState<number>(CLEF_CONFIGS['bass'].defaultMinDiatonic);
-  const [maxDiatonic2, setMaxDiatonic2] = useState<number>(CLEF_CONFIGS['bass'].defaultMaxDiatonic);
+  const [dualClefEnabled, setDualClefEnabled] = useState<boolean>(initialSettings?.dualClefEnabled ?? false);
+  const [secondaryClef, setSecondaryClef] = useState<ClefType>(initialSettings?.secondaryClef || 'bass');
+  const [minDiatonic2, setMinDiatonic2] = useState<number>(
+    initialSettings?.minDiatonic2 ?? CLEF_CONFIGS[initialSettings?.secondaryClef || 'bass'].defaultMinDiatonic
+  );
+  const [maxDiatonic2, setMaxDiatonic2] = useState<number>(
+    initialSettings?.maxDiatonic2 ?? CLEF_CONFIGS[initialSettings?.secondaryClef || 'bass'].defaultMaxDiatonic
+  );
 
   // Bilateral Range Boundaries (Diatonic Index)
-  const defaultClefConfig = CLEF_CONFIGS['treble'];
-  const [minDiatonic, setMinDiatonic] = useState<number>(defaultClefConfig.defaultMinDiatonic);
-  const [maxDiatonic, setMaxDiatonic] = useState<number>(defaultClefConfig.defaultMaxDiatonic);
+  const defaultClefConfig = CLEF_CONFIGS[initialSettings?.clef || 'treble'];
+  const [minDiatonic, setMinDiatonic] = useState<number>(
+    initialSettings?.minDiatonic ?? defaultClefConfig.defaultMinDiatonic
+  );
+  const [maxDiatonic, setMaxDiatonic] = useState<number>(
+    initialSettings?.maxDiatonic ?? defaultClefConfig.defaultMaxDiatonic
+  );
 
   // Scales & Tonality
-  const [selectedScaleId, setSelectedScaleId] = useState<string>('c_major');
-  const [allowedSteps, setAllowedSteps] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [keySignature, setKeySignature] = useState<{ [step: number]: Accidental }>({});
+  const [selectedScaleId, setSelectedScaleId] = useState<string>(initialSettings?.selectedScaleId || 'c_major');
+  const [allowedSteps, setAllowedSteps] = useState<number[]>(
+    initialSettings?.allowedSteps || [0, 1, 2, 3, 4, 5, 6]
+  );
+  const [keySignature, setKeySignature] = useState<{ [step: number]: Accidental }>(
+    initialSettings?.keySignature || {}
+  );
 
   // Scrolling Mode Controls
-  const [baseTempo, setBaseTempo] = useState<number>(2); // 1 to 4
-  const [adaptiveScrolling, setAdaptiveScrolling] = useState<boolean>(true);
+  const [baseTempo, setBaseTempo] = useState<number>(initialSettings?.baseTempo ?? 2); // 1 to 4
+  const [adaptiveScrolling, setAdaptiveScrolling] = useState<boolean>(
+    initialSettings?.adaptiveScrolling ?? true
+  );
   const [isScrollingPaused, setIsScrollingPaused] = useState<boolean>(false);
   const scrollingActiveNoteRef = useRef<MusicalNote | null>(null);
   const [scrollingActiveNote, setScrollingActiveNote] = useState<MusicalNote | null>(null);
+
+  // Note Statistics Map (stored in browser localStorage)
+  const [noteStats, setNoteStats] = useState<NoteStatsMap>(() => loadNoteStatsFromStorage());
+
+  // Smart note selection: focus on notes that are least mastered or never proposed
+  const [focusWeakNotes, setFocusWeakNotes] = useState<boolean>(
+    initialSettings?.focusWeakNotes ?? false
+  );
+  const [weakNotesThreshold, setWeakNotesThreshold] = useState<number>(
+    initialSettings?.weakNotesThreshold ?? 70
+  );
+
+  // Timestamp of the last action or note presentation for response time calculation
+  const lastResponseTimeRef = useRef<number>(Date.now());
 
   // Static / Timed Staff Notes
   const [staticNotes, setStaticNotes] = useState<MusicalNote[]>([]);
@@ -101,6 +139,58 @@ export default function App() {
     soundEngine.setMuted(!soundEnabled);
   }, [soundEnabled]);
 
+  // Synchronize all settings to browser local storage
+  useEffect(() => {
+    saveSettingsToStorage({
+      clef,
+      dualClefEnabled,
+      secondaryClef,
+      minDiatonic,
+      maxDiatonic,
+      minDiatonic2,
+      maxDiatonic2,
+      selectedScaleId,
+      allowedSteps,
+      keySignature,
+      playMode,
+      baseTempo,
+      adaptiveScrolling,
+      notesCount,
+      naming,
+      inputView,
+      showNoteHint,
+      soundEnabled,
+      focusWeakNotes,
+      weakNotesThreshold,
+    });
+  }, [
+    clef,
+    dualClefEnabled,
+    secondaryClef,
+    minDiatonic,
+    maxDiatonic,
+    minDiatonic2,
+    maxDiatonic2,
+    selectedScaleId,
+    allowedSteps,
+    keySignature,
+    playMode,
+    baseTempo,
+    adaptiveScrolling,
+    notesCount,
+    naming,
+    inputView,
+    showNoteHint,
+    soundEnabled,
+    focusWeakNotes,
+    weakNotesThreshold,
+  ]);
+
+  const handleClearStats = useCallback(() => {
+    clearNoteStatsFromStorage();
+    setNoteStats({});
+  }, []);
+
   // When clef changes, reset default min/max diatonic
   const handleChangeClef = (newClef: ClefType) => {
     setClef(newClef);
@@ -126,14 +216,50 @@ export default function App() {
 
   // Generate a batch of static notes
   const generateStaticBatch = useCallback(
-    (count: number) => {
+    (count: number, customFocusWeak?: boolean, customThreshold?: number) => {
       const notes: MusicalNote[] = [];
+      const useFocus = customFocusWeak !== undefined ? customFocusWeak : focusWeakNotes;
+      const threshold = customThreshold !== undefined ? customThreshold : weakNotesThreshold;
       for (let i = 0; i < count; i++) {
-        notes.push(generateRandomNote(minDiatonic, maxDiatonic, allowedSteps, keySignature));
+        notes.push(
+          generateRandomNote(
+            minDiatonic,
+            maxDiatonic,
+            allowedSteps,
+            keySignature,
+            clef,
+            noteStats,
+            useFocus,
+            threshold
+          )
+        );
       }
       return notes;
     },
-    [minDiatonic, maxDiatonic, allowedSteps, keySignature]
+    [minDiatonic, maxDiatonic, allowedSteps, keySignature, clef, noteStats, focusWeakNotes, weakNotesThreshold]
+  );
+
+  const handleToggleFocusWeakNotes = useCallback(() => {
+    setFocusWeakNotes((prev) => {
+      const next = !prev;
+      if (playMode !== 'scrolling') {
+        // Regenerate static notes with new distribution immediately
+        setStaticNotes(generateStaticBatch(notesCount, next));
+        setActiveNoteIndex(0);
+      }
+      return next;
+    });
+  }, [playMode, notesCount, generateStaticBatch]);
+
+  const handleChangeWeakNotesThreshold = useCallback(
+    (newThreshold: number) => {
+      setWeakNotesThreshold(newThreshold);
+      if (playMode !== 'scrolling') {
+        setStaticNotes(generateStaticBatch(notesCount, focusWeakNotes, newThreshold));
+        setActiveNoteIndex(0);
+      }
+    },
+    [playMode, notesCount, focusWeakNotes, generateStaticBatch]
   );
 
   // Reset or initialize state
@@ -224,6 +350,21 @@ export default function App() {
     const accMatches = userAccidental === targetAcc;
 
     const isCorrect = stepMatches && accMatches;
+
+    // Reaction time computation (since last response or note appearance)
+    const now = Date.now();
+    const reactionTimeMs = Math.min(Math.max(now - lastResponseTimeRef.current, 150), 20000);
+    lastResponseTimeRef.current = now;
+
+    // Record note result in browser persistent storage
+    const { updatedStats } = updateNoteStat(
+      noteStats,
+      currentTargetNote,
+      clef,
+      isCorrect,
+      reactionTimeMs
+    );
+    setNoteStats(updatedStats);
 
     if (isCorrect) {
       // Success!
@@ -327,6 +468,8 @@ export default function App() {
         onResetScore={resetGameState}
         streak={score.streak}
         points={score.points}
+        focusWeakNotes={focusWeakNotes}
+        weakNotesThreshold={weakNotesThreshold}
       />
 
       {/* Main Workspace - 100% Focused on Partition & Response Buttons */}
@@ -368,6 +511,9 @@ export default function App() {
                 errorFlash={errorFlash}
                 isPaused={isScrollingPaused}
                 setIsPaused={setIsScrollingPaused}
+                stats={noteStats}
+                focusWeakNotes={focusWeakNotes}
+                weakNotesThreshold={weakNotesThreshold}
               />
             ) : (
               <div className="w-full relative">
@@ -493,6 +639,12 @@ export default function App() {
         onToggleNoteHint={() => setShowNoteHint(!showNoteHint)}
         soundEnabled={soundEnabled}
         onToggleSound={() => setSoundEnabled(!soundEnabled)}
+        stats={noteStats}
+        onClearStats={handleClearStats}
+        focusWeakNotes={focusWeakNotes}
+        onToggleFocusWeakNotes={handleToggleFocusWeakNotes}
+        weakNotesThreshold={weakNotesThreshold}
+        onChangeWeakNotesThreshold={handleChangeWeakNotesThreshold}
         onResetScore={resetGameState}
       />
 

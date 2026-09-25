@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ClefType, MusicalNote, NoteNaming, Accidental } from '../types';
+import { ClefType, MusicalNote, NoteNaming, Accidental, NoteStatsMap } from '../types';
 import {
   CLEF_CONFIGS,
   generateRandomNote,
@@ -36,6 +36,9 @@ interface ScrollingStaffProps {
   errorFlash: boolean;
   isPaused: boolean;
   setIsPaused: (paused: boolean) => void;
+  stats?: NoteStatsMap;
+  focusWeakNotes?: boolean;
+  weakNotesThreshold?: number;
 }
 
 export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
@@ -58,6 +61,9 @@ export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
   errorFlash,
   isPaused,
   setIsPaused,
+  stats,
+  focusWeakNotes = false,
+  weakNotesThreshold = 70,
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const notesQueueRef = useRef<MovingNote[]>([]);
@@ -82,6 +88,14 @@ export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
   const lineSpacing = dualClefEnabled ? (isMobile ? 11 : 12) : 14;
 
   const secClef: ClefType = (secondaryClef || 'bass') as ClefType;
+
+  // Keep refs for stats, focusWeakNotes and threshold so spawned notes in rAF loop always use current data
+  const statsRef = useRef(stats);
+  statsRef.current = stats;
+  const focusWeakNotesRef = useRef(focusWeakNotes);
+  focusWeakNotesRef.current = focusWeakNotes;
+  const weakNotesThresholdRef = useRef(weakNotesThreshold);
+  weakNotesThresholdRef.current = weakNotesThreshold;
 
   // Single Clef geometry
   const singleStaffCenterY = 85;
@@ -149,9 +163,27 @@ export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
         maxD = maxDiatonic2 ?? CLEF_CONFIGS[secClef].defaultMaxDiatonic;
       }
 
-      return generateRandomNote(minD, maxD, allowedSteps, keySignature, noteClef);
+      return generateRandomNote(
+        minD,
+        maxD,
+        allowedSteps,
+        keySignature,
+        noteClef,
+        statsRef.current,
+        focusWeakNotesRef.current,
+        weakNotesThresholdRef.current
+      );
     } else {
-      return generateRandomNote(minDiatonic, maxDiatonic, allowedSteps, keySignature, clef);
+      return generateRandomNote(
+        minDiatonic,
+        maxDiatonic,
+        allowedSteps,
+        keySignature,
+        clef,
+        statsRef.current,
+        focusWeakNotesRef.current,
+        weakNotesThresholdRef.current
+      );
     }
   };
 
@@ -182,7 +214,7 @@ export const ScrollingStaff: React.FC<ScrollingStaffProps> = ({
       activeNoteRef.current = notesQueueRef.current[0].note;
       onActiveNoteChanged(notesQueueRef.current[0].note);
     }
-  }, [clef, dualClefEnabled, secondaryClef, minDiatonic, maxDiatonic, minDiatonic2, maxDiatonic2, allowedSteps, keySignature, isMobile]);
+  }, [clef, dualClefEnabled, secondaryClef, minDiatonic, maxDiatonic, minDiatonic2, maxDiatonic2, allowedSteps, keySignature, isMobile, focusWeakNotes]);
 
   // Main 60fps animation loop with Adaptive Speed Deceleration
   useEffect(() => {

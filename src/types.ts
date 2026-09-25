@@ -49,3 +49,21 @@ export interface GameScore {
   elapsedTime: number;
   lives?: number;
 }
+
+export interface NoteStat {
+  key: string; // e.g. "treble_32_natural"
+  clef: ClefType;
+  diatonicIndex: number;
+  step: number;
+  octave: number;
+  accidental: Accidental;
+  attempts: number;
+  correct: number;
+  errors: number;
+  totalReactionTimeMs: number;
+  averageReactionTimeMs: number;
+  masteryScore: number; // 0 to 100
+  lastPracticed: number;
+}
+
+export type NoteStatsMap = { [noteKey: string]: NoteStat };

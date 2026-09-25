@@ -1,4 +1,4 @@
-import { ClefType, NoteNaming, Accidental, MusicalNote, ScalePreset } from '../types';
+import { ClefType, NoteNaming, Accidental, MusicalNote, ScalePreset, NoteStatsMap } from '../types';
 
 export const LATIN_NOTES = ['Do', 'Ré', 'Mi', 'Fa', 'Sol', 'La', 'Si'];
 export const ANGLO_NOTES = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
@@ -202,14 +202,24 @@ export function getLedgerLines(lineOffset: number): number[] {
 }
 
 /**
- * Given diatonic range and settings, generate a random note matching allowed scale
+ * Given diatonic range and settings, generate a note matching the allowed scale.
+ *
+ * If focusWeakNotes is false (or stats not provided):
+ *   Strictly uniform random pick among all valid candidates (pure chance).
+ *
+ * If focusWeakNotes is true:
+ *   Proposes notes whose success percentage is below weakNotesThreshold (or unattempted notes).
+ *   If all notes in the range meet the threshold, gracefully falls back to the full set.
  */
 export function generateRandomNote(
   minDiatonic: number,
   maxDiatonic: number,
   allowedSteps: number[],
   keySignature: { [step: number]: Accidental },
-  clef?: ClefType
+  clef: ClefType = 'treble',
+  stats?: NoteStatsMap,
+  focusWeakNotes?: boolean,
+  weakNotesThreshold: number = 70
 ): MusicalNote {
   const validDiatonics: number[] = [];
   for (let d = minDiatonic; d <= maxDiatonic; d++) {
@@ -220,16 +230,78 @@ export function generateRandomNote(
   }
 
   // Fallback if range doesn't have any allowed steps
-  const diatonicIndex = validDiatonics.length > 0 
-    ? validDiatonics[Math.floor(Math.random() * validDiatonics.length)]
-    : minDiatonic;
+  if (validDiatonics.length === 0) {
+    const fallbackStep = ((minDiatonic % 7) + 7) % 7;
+    const fallbackAcc = keySignature[fallbackStep] || 'natural';
+    const fallbackNote = createNoteFromDiatonic(minDiatonic, fallbackAcc);
+    fallbackNote.clef = clef;
+    return fallbackNote;
+  }
+
+  let diatonicIndex: number;
+
+  if (focusWeakNotes && stats) {
+    // 1. Filter candidates to notes below the success percentage threshold (or unattempted notes)
+    const qualifyingDiatonics: number[] = [];
+    const weights: number[] = [];
+    let totalWeight = 0;
+
+    for (const d of validDiatonics) {
+      const step = ((d % 7) + 7) % 7;
+      const acc = keySignature[step] || 'natural';
+      const key = `${clef}_${d}_${acc}`;
+      const stat = stats[key];
+
+      let isQualifying = false;
+      let weight = 0;
+
+      if (!stat || stat.attempts === 0) {
+        // Never proposed note: 0% success, should be proposed with strong priority
+        isQualifying = true;
+        weight = 100;
+      } else {
+        const successRate = (stat.correct / stat.attempts) * 100;
+        if (successRate < weakNotesThreshold) {
+          isQualifying = true;
+          // The lower the success rate and the more errors, the higher the weight
+          const deficit = Math.max(1, weakNotesThreshold - successRate);
+          const errorBonus = Math.min(stat.errors * 6, 45);
+          weight = Math.round(deficit * 1.5 + errorBonus + 15);
+        }
+      }
+
+      if (isQualifying) {
+        qualifyingDiatonics.push(d);
+        weights.push(weight);
+        totalWeight += weight;
+      }
+    }
+
+    if (qualifyingDiatonics.length > 0 && totalWeight > 0) {
+      // Pick exclusively from the notes that meet the criterion (below threshold)
+      let rand = Math.random() * totalWeight;
+      diatonicIndex = qualifyingDiatonics[qualifyingDiatonics.length - 1];
+      for (let i = 0; i < qualifyingDiatonics.length; i++) {
+        rand -= weights[i];
+        if (rand <= 0) {
+          diatonicIndex = qualifyingDiatonics[i];
+          break;
+        }
+      }
+    } else {
+      // If every note in the scale has already reached >= weakNotesThreshold,
+      // fallback to picking among all valid notes so practice continues seamlessly
+      diatonicIndex = validDiatonics[Math.floor(Math.random() * validDiatonics.length)];
+    }
+  } else {
+    // STRICT UNIFORM RANDOM: pure chance across all valid diatonic positions
+    diatonicIndex = validDiatonics[Math.floor(Math.random() * validDiatonics.length)];
+  }
 
   const step = ((diatonicIndex % 7) + 7) % 7;
   const accidental = keySignature[step] || 'natural';
 
   const note = createNoteFromDiatonic(diatonicIndex, accidental);
-  if (clef) {
-    note.clef = clef;
-  }
+  note.clef = clef;
   return note;
 }
